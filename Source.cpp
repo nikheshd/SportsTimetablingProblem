@@ -3,19 +3,467 @@
 #include <fstream>
 #include <string>
 #include <vector>
+#include "tinyxml2.h"
 #include "ilcplex/ilocplex.h"
 using namespace std;
+using namespace tinyxml2;
+
+#pragma region Structs and Functions
+struct CA1 {
+	string type;
+	string model;
+	int min;
+	int max;
+	int penalty;
+	vector<int>slots;
+	vector<int>teams;
+};
+
+struct CA2
+{
+	string type;
+	int min;
+	int max;
+	int penalty;
+	vector<int>teams1;
+	vector<int>teams2;
+	vector<int>slots;
+	string model;
+};
+
+struct CA3
+{
+	string type;
+	int min;
+	int max;
+	int intp;
+	int penalty;
+	vector<int>teams1;
+	vector<int>teams2;
+	string mode1;
+	string mode2;
+};
+
+struct CA4
+{
+	string type;
+	int min;
+	int max;
+	int penalty;
+	vector<int>teams1;
+	vector<int>teams2;
+	vector<int>slots;
+	string mode1;
+	string mode2;
+};
+
+struct GA1
+{
+	string type;
+	int min;
+	int max;
+	int penalty;
+	vector<pair<int, int>>meetings;
+	vector<int>slots;
+
+
+};
+
+struct BR1
+{
+	string type;
+	int intp;
+	int penalty;
+	vector<int>teams;
+	vector<int>slots;
+	string mode2;
+};
+struct BR2
+{
+	string type;
+	int intp;
+	int penalty;
+	vector<int>teams;
+	vector<int>slots;
+	string mode;
+};
+
+struct FA1
+{
+	string type;
+	int intp;
+	int penalty;
+	vector<int>slots;
+	string mode;
+	vector<int>teams;
+};
+
+struct SE1
+{
+	string type;
+	int min;
+	int penalty;
+	vector<int>teams;
+};
+
+vector<int> stov(const char* s)
+{
+	//convert string of type "a1;a2;a3;a4;a5" to vector {a1,a2,a3,a4,a4,a5}
+	vector<int>ans;
+	int it = 0;
+	while (s[it] != '\0')
+	{
+		int a = (int)(s[it] - '0');
+		it++;
+		while (s[it] != '\0' && s[it] != ';')
+		{
+			int b = (int)(s[it] - '0');
+			a = 10 * a + b;
+			it++;
+		}
+		ans.push_back(a);
+		if (s[it] == ';')
+			it++;
+	}
+	return ans;
+}
+vector<pair<int, int>>stov2(const char* m)
+{
+	//convert string(of type "a1,b1;a2,b2;a3,b3") to vector{{a1,b1},{a2,b2},{a3,b3}} 
+	vector<pair<int, int>>ans;
+	int i = 0;
+	while (m[i] != '\0')
+	{
+		pair<int, int>p;
+		int a = (int)(m[i] - '0');
+		i++;
+		while (m[i] != '\0' && m[i] != ',')
+		{
+			int at = (int)(m[i] - '0');
+			a = 10 * a + at;
+			i++;
+		}
+		//m[i]==','
+		i++;
+		int b = (int)(m[i] - '0');
+		i++;
+		while (m[i] != '\0' && m[i] != ';')
+		{
+			int bt = (int)(m[i] - '0');
+			b = 10 * b + bt;
+			i++;
+		}
+		p.first = a;
+		p.second = b;
+		ans.push_back(p);
+		if (m[i] == ';')
+			i++;
+	}
+	return ans;
+}
+#pragma endregion
 
 int main() {
-	int n = 6;
-	int m = 2 * (n - 1);
-	string gamemode = "P";
 
+	#pragma region Read Data
+	int n = 0;
+	string GameMode;
+	vector<CA1>constraints1;
+	vector<CA2>constraints2;
+	vector<CA3>constraints3;
+	vector<CA4>constraints4;
+	vector<GA1>gameconstraints1;
+	vector<BR1>breakconstraints1;
+	vector<BR2>breakconstraints2;
+	vector<FA1>fairnessconstraints1;
+	vector<SE1>seperationconstraints1;
+	try
+	{
+		XMLDocument doc;
+		doc.LoadFile("ITC2021_Test1.xml");
+
+		XMLElement* root = doc.RootElement();
+
+		if (root)
+		{
+			XMLElement* teams = root->FirstChildElement("Resources")->FirstChildElement("Teams");
+			if (teams)
+			{
+				XMLElement* team = teams->FirstChildElement("team");
+				while (team)
+				{
+					n++;
+					team = team->NextSiblingElement("team");
+				}
+				//cout << "n=" << n << '\n';
+			}
+			else
+			{
+				cerr << "Error: Teams not found\n";
+			}
+		}
+		else
+		{
+			cerr << "Error :Unable to Load xml file" << "\n";
+		}
+
+
+		if (root)
+		{
+			XMLElement* mode = root->FirstChildElement("Structure")->FirstChildElement("Format")->FirstChildElement("gameMode");
+			if (mode)
+			{
+
+				if ((mode->GetText())[0] == 'P')
+				{
+					//phased constraint holds true
+					//each team play every other team exactly once in first half of the tournament
+					//sum over k =1 to k =n-1 (x[i][j][k]+x[j][i][k]) ==1 for evry i,j i!=j
+					GameMode = "P";
+				}
+			}
+			else
+			{
+				cerr << "error: gamemode not found\n";
+			}
+		}
+
+		if (root)
+		{
+			XMLElement* constraints = root->FirstChildElement("Constraints");
+			if (constraints)
+			{
+				XMLElement* capacityc = constraints->FirstChildElement("CapacityConstraints");
+				XMLElement* gamec = constraints->FirstChildElement("GameConstraints");
+				XMLElement* breakc = constraints->FirstChildElement("BreakConstraints");
+				XMLElement* fairnessc = constraints->FirstChildElement("FairnessConstraints");
+				XMLElement* separationc = constraints->FirstChildElement("SeparationConstraints");
+
+
+				if (capacityc)
+				{
+					XMLElement* ca1 = capacityc->FirstChildElement("CA1");
+					// <CA1 teams="0"  max="0" mode="H" slots="0" type="HARD"/>
+					while (ca1)
+					{
+						const char* type = ca1->Attribute("type");
+						int min, max;
+						int penalty;
+						const char* team = ca1->Attribute("teams");
+						const char* s = ca1->Attribute("slots");
+						const char* mode = ca1->Attribute("mode");
+						vector<int> slots = stov(s);
+						vector<int>teams = stov(team);
+						ca1->QueryAttribute("penalty", &penalty);
+						ca1->QueryAttribute("min", &min);
+						ca1->QueryAttribute("max", &max);
+						constraints1.push_back({ type,mode,min,max,penalty,slots,teams });
+						ca1 = ca1->NextSiblingElement("CA1");
+					}
+					XMLElement* ca2 = capacityc->FirstChildElement("CA2");
+
+					while (ca2)
+					{
+						const char* type = ca2->Attribute("type");
+						int min, max;
+						int penalty;
+						const char* s = ca2->Attribute("slots");
+						const char* mode = ca2->Attribute("mode1");
+						const char* t1 = ca2->Attribute("teams1");
+						const char* t2 = ca2->Attribute("teams2");
+						vector<int>teams1 = stov(t1);
+						vector<int>teams2 = stov(t2);
+						vector<int> slots = stov(s);
+						ca2->QueryAttribute("penalty", &penalty);
+						ca2->QueryAttribute("min", &min);
+						ca2->QueryAttribute("max", &max);
+						constraints2.push_back({ type,min,max,penalty,teams1,teams2,slots,mode });
+						ca2 = ca2->NextSiblingElement("CA2");
+					}
+					XMLElement* ca3 = capacityc->FirstChildElement("CA3");
+					while (ca3)
+					{
+						const char* type = ca3->Attribute("type");
+						int  min, max, intp;
+						int penalty;
+						const char* t1 = ca3->Attribute("teams1");
+						const char* t2 = ca3->Attribute("teams2");
+						const char* mode1 = ca3->Attribute("mode1");
+						const char* mode2 = ca3->Attribute("mode2");
+						vector<int> teams2 = stov(t2);
+						vector<int> teams1 = stov(t1);
+
+						ca3->QueryAttribute("penalty", &penalty);
+						ca3->QueryAttribute("min", &min);
+						ca3->QueryAttribute("max", &max);
+						ca3->QueryAttribute("intp", &intp);
+						constraints3.push_back({ type,min,max,intp,penalty,teams1,teams2,mode1,mode2 });
+						ca3 = ca3->NextSiblingElement("CA3");
+					}
+					XMLElement* ca4 = capacityc->FirstChildElement("CA4");
+
+					while (ca4)
+					{
+						const char* type = ca4->Attribute("type");
+						int  min, max;
+						int penalty;
+						const char* t1 = ca4->Attribute("teams1");
+						const char* t2 = ca4->Attribute("teams2");
+						const char* s = ca4->Attribute("slots");
+						const char* mode1 = ca4->Attribute("mode1");
+						const char* mode2 = ca4->Attribute("mode2");
+						vector<int>teams1 = stov(t1);
+						vector<int> teams2 = stov(t2);
+						vector<int>slots = stov(s);
+						ca4->QueryAttribute("penalty", &penalty);
+						ca4->QueryAttribute("min", &min);
+						ca4->QueryAttribute("max", &max);
+						constraints4.push_back({ type,min,max,penalty,teams1,teams2,slots,mode1,mode2 });
+						ca4 = ca4->NextSiblingElement("CA4");
+					}
+				}
+				else
+				{
+					cerr << "error:capacity constraints not found\n";
+				}
+
+				if (gamec)
+				{
+					XMLElement* ga1 = gamec->FirstChildElement("GA1");
+					while (ga1)
+					{
+						const char* type = ga1->Attribute("type");
+						int  min, max;
+						int penalty;
+						const char* s = ga1->Attribute("slots");
+						const char* m = ga1->Attribute("meetings");
+						vector<pair<int, int>>meetings = stov2(m);
+						vector<int>slots = stov(s);
+						ga1->QueryAttribute("penalty", &penalty);
+						ga1->QueryAttribute("min", &min);
+						ga1->QueryAttribute("max", &max);
+						gameconstraints1.push_back({ type,min,max,penalty,meetings,slots });
+						ga1 = ga1->NextSiblingElement("GA1");
+					}
+				}
+				else
+				{
+					cerr << "error:game constraints not found\n";
+				}
+
+				if (breakc)
+				{
+					XMLElement* br1 = breakc->FirstChildElement("BR1");
+
+					while (br1)
+					{
+						const char* type = br1->Attribute("type");
+						int intp;
+						int penalty;
+						const char* s = br1->Attribute("slots");
+						const char* t = br1->Attribute("teams");
+						const char* mode = br1->Attribute("mode2");
+						vector<int>teams = stov(t);
+						vector<int>slots = stov(s);
+						br1->QueryAttribute("penalty", &penalty);
+						br1->QueryAttribute("intp", &intp);
+						breakconstraints1.push_back({ type,intp,penalty,teams,slots,mode });
+						br1 = br1->NextSiblingElement("BR1");
+					}
+					XMLElement* br2 = breakc->FirstChildElement("BR2");
+
+					while (br2)
+					{
+						const char* type = br2->Attribute("type");
+						int   intp;
+						int penalty;
+						const char* s = br2->Attribute("slots");
+						const char* mode = br2->Attribute("homeMode");
+						const char* t = br2->Attribute("teams");
+						vector<int>slots = stov(s);
+						vector<int>teams = stov(t);
+						br2->QueryAttribute("penalty", &penalty);
+						br2->QueryAttribute("intp", &intp);
+						breakconstraints2.push_back({ type,intp,penalty,teams,slots,mode });
+						br2 = br2->NextSiblingElement("BR2");
+					}
+				}
+				else
+				{
+					cerr << "error:break constraints not found\n";
+				}
+				if (fairnessc)
+				{
+					XMLElement* fa2 = fairnessc->FirstChildElement("FA2");
+					while (fa2)
+					{
+						const char* type = fa2->Attribute("type");
+						int   intp;
+						int penalty;
+						const char* s = fa2->Attribute("slots");
+						const char* mode = fa2->Attribute("mode");
+						const char* t = fa2->Attribute("teams");
+						vector<int>slots = stov(s);
+						vector<int>teams = stov(t);
+						fa2->QueryAttribute("penalty", &penalty);
+						fa2->QueryAttribute("intp", &intp);
+						fairnessconstraints1.push_back({ type,intp,penalty,slots,mode,teams });
+						fa2 = fairnessc->NextSiblingElement("FA2");
+					}
+				}
+				else
+				{
+					cerr << "error:fairness constraints not found\n";
+				}
+
+				if (separationc)
+				{
+					XMLElement* se1 = separationc->FirstChildElement("SE1");
+					while (se1)
+					{
+						const char* type = se1->Attribute("type");
+						int   min;
+						int penalty;
+
+
+						const char* t = se1->Attribute("teams");
+
+						vector<int>teams = stov(t);
+						se1->QueryAttribute("penalty", &penalty);
+						se1->QueryAttribute("min", &min);
+						min++;
+						seperationconstraints1.push_back({ type,min,penalty,teams });
+						se1 = separationc->NextSiblingElement("SE1");
+					}
+				}
+				else
+				{
+					cerr << "error:separation constraints not found\n";
+				}
+
+			}
+			else
+			{
+				cerr << "Error:Constraints not found\n";
+			}
+
+		}
+
+
+	}
+	catch (...) {
+		cerr << " ERROR" << endl;
+		throw;
+	}
+	//cout << constraints1.size() << endl;
+	#pragma endregion
+
+	int m = 2 * (n - 1); //no. of time slots available
 	IloEnv env;
 	IloModel Model(env);
-	IloArray<IloArray<IloBoolVarArray>> x(env, n);
+	IloArray<IloArray<IloBoolVarArray>> x(env, n);  //decision variables
 
-
+	//decision variables
 	for (int i = 0; i < n; i++)
 	{
 		x[i] = IloArray<IloBoolVarArray>(env, n);
@@ -25,6 +473,7 @@ int main() {
 		}
 	}
 
+	//common constraint 1
 	for (int i = 0; i < n; i++)
 	{
 		for (int k = 0; k < m; k++)
@@ -41,7 +490,7 @@ int main() {
 		}
 	}
 
-	//gamemode: NULL
+	//common constraint 2
 	for (int i = 0; i < n; i++)
 	{
 		for (int j = 0; j < n; j++)
@@ -58,8 +507,8 @@ int main() {
 		}
 	}
 
-	//gamemode: Phased
-	if (gamemode == "P") {
+	//gamemode: Phased constraint
+	if (GameMode == "P") {
 		for (int i = 0; i < n; i++)
 		{
 			for (int j = 0; j < n; j++)
@@ -77,6 +526,7 @@ int main() {
 		}
 	}
 
+	//common constraint 3
 	for (int i = 0; i < n; i++)
 	{
 		for (int k = 0; k < m; k++)
@@ -85,48 +535,126 @@ int main() {
 		}
 	}
 
-	/*
-	<CA1 max="0" min="0" mode="H" penalty="1" slots="5" teams="4" type="SOFT"/>
-	<CA1 max="1" min="0" mode="H" penalty="1" slots="2;1" teams="5" type="SOFT"/>
-	<CA1 max="1" min="0" mode="H" penalty="1" slots="9;7;1" teams="1" type="SOFT"/>*/
-	IloExpr ca1_1(env), ca1_2(env), ca1_3(env);
-	IloNumVar yca1_1(env, 0, IloInfinity, ILOINT), yca1_2(env, 0, IloInfinity, ILOINT), yca1_3(env, 0, IloInfinity, ILOINT);
-	for (int j = 0; j < n; j++)
-	{
-		ca1_1 += x[4][j][5];
-		ca1_2 += x[5][j][2] + x[5][j][1];
-		ca1_3 += x[1][j][9] + x[1][j][7] + x[1][j][1];
-	}
-	Model.add(ca1_1 <= yca1_1);
-	Model.add(ca1_2 <= 1 + yca1_2);
-	Model.add(ca1_3 <= 1 + yca1_3);
+	IloExpr Objectivefn(env);  //objective function
 
-	/*<CA2 teams1 = "0" min = "0" max = "1" mode1 = "HA" mode2 = "GLOBAL" penalty = "1" teams2 = "1;2"
-		slots = "0;1;2" type = "SOFT" / >*/
-	IloExpr ca2(env);
-	IloNumVar yca2(env, 0, IloInfinity, ILOINT);
-	ca2 += x[0][1][0] + x[0][2][0] + x[0][1][1] + x[0][2][1] + x[0][1][2] + x[0][2][2];
-	Model.add(ca2 <= 1 + yca2);
-
-	/*CA3
-	<CA3 intp = "4" max = "2" min = "0" mode1 = "A" mode2 = "SLOTS" penalty = "5" teams1 = "2" teams2 = "0;3;5;4;1" type = "SOFT" / > */
-	IloNumVar yca3(env, 0, IloInfinity, ILOINT);
-	for (int k = 0; k < m-4; k++)
+	//CA1 constraints
+	IloExprArray CA1_expr(env, constraints1.size());
+	IloNumVarArray y_ca1(env, constraints1.size(), 0, IloInfinity, ILOINT);
+	for (int i = 0; i < constraints1.size(); i++)
 	{
-		IloExpr d1(env);
-		for (int i = k; i < k+4; i++)
+		for (int j = 0; j < n; j++)
 		{
-			d1 += x[2][0][i] + x[2][3][i] + x[2][5][i] + x[2][4][i] + x[2][1][i];
+			for (int k = 0; k < constraints1[i].slots.size(); k++)
+			{
+				if(constraints1[i].model=="H"){ 
+					CA1_expr[i] += x[constraints1[i].teams[0]][j][constraints1[i].slots[k]]; 
+				}
+				else if(constraints1[i].model == "A"){ 
+					CA1_expr[i] += x[j][constraints1[i].teams[0]][constraints1[i].slots[k]]; 
+				}
+			}
 		}
-		Model.add(d1 <= 2 + yca3);
+		Model.add(CA1_expr[i] <= constraints1[i].max + y_ca1[i]);
+		if (constraints1[i].type == "HARD") {
+			Model.add(y_ca1[i] == 0);
+		}
+		Objectivefn += constraints1[i].penalty * y_ca1[i];
 	}
 
-	/*<CA4 teams1="0;1" max="3" mode1="H" teams2="2,3" mode2="GLOBAL"
-	slots ="0;1" type="SOFT"/>*/
+	//CA2 constraints
+	IloExprArray CA2_expr(env, constraints2.size());
+	IloNumVarArray y_ca2(env, constraints2.size(), 0, IloInfinity, ILOINT);
+	for (int i = 0; i < constraints2.size(); i++)
+	{
+		for (int j = 0; j < constraints2[i].teams2.size(); j++)
+		{
+			for (int k = 0; k < constraints2[i].slots.size(); k++)
+			{
+				if (constraints2[i].model == "H") {
+					CA2_expr[i] += x[constraints2[i].teams1[0]][constraints2[i].teams2[j]][constraints2[i].slots[k]];
+				}
+				else if (constraints2[i].model == "A") {
+					CA2_expr[i] += x[constraints2[i].teams2[j]][constraints2[i].teams1[0]][constraints2[i].slots[k]];
+				}
+				else if (constraints2[i].model == "HA") {
+					CA2_expr[i] += x[constraints2[i].teams1[0]][constraints2[i].teams2[j]][constraints2[i].slots[k]] + x[constraints2[i].teams2[j]][constraints2[i].teams1[0]][constraints2[i].slots[k]];
+				}
+			}
+		}
+		Model.add(CA2_expr[i] <= constraints2[i].max + y_ca2[i]);
+		if (constraints2[i].type == "HARD") {
+			Model.add(y_ca2[i] == 0);
+		}
+		Objectivefn += constraints2[i].penalty * y_ca2[i];
+	}
 
-	IloExpr Objectivefn(env);
-	Objectivefn += yca1_1 + yca1_2 + yca1_3 + yca2 + 4*yca3;
+	//CA3 constraints
+	IloExprArray CA3_expr(env, constraints3.size());
+	IloNumVarArray y_ca3(env, constraints3.size(), 0, IloInfinity, ILOINT);
+	for (int i = 0; i < constraints3.size(); i++)
+	{
+		for (int k = 0; k < m - constraints3[i].intp; k++)
+		{
+			for (int l = k; l < k + constraints3[i].intp; l++)
+			{
+				for (int j = 0; j < constraints3[i].teams2.size(); j++)
+				{
+					if (constraints3[i].mode1 == "H") {
+						CA3_expr[i] += x[constraints3[i].teams1[0]][constraints3[i].teams2[j]][l];
+					}
+					else if (constraints3[i].mode1 == "A") {
+						CA3_expr[i] += x[constraints3[i].teams2[j]][constraints3[i].teams1[0]][l];
+					}
+					else if (constraints3[i].mode1 == "HA") {
+						CA3_expr[i] += x[constraints3[i].teams1[0]][constraints3[i].teams2[j]][l] + x[constraints3[i].teams2[j]][constraints3[i].teams1[0]][l];
+					}
+				}
+			}
+			Model.add(CA3_expr[i] <= constraints3[i].max + y_ca3[i]);
+		}
+		if (constraints3[i].type == "HARD") {
+			Model.add(y_ca3[i] == 0);
+		}
+		Objectivefn += constraints3[i].penalty * y_ca3[i];
+	}
 
+	//CA4 constraints
+	IloExprArray CA4_expr(env, constraints4.size());
+	IloNumVarArray y_ca4(env, constraints4.size(), 0, IloInfinity, ILOINT);
+	for (int i = 0; i < constraints4.size(); i++)
+	{
+		for (int j = 0; j < constraints4[i].teams1.size(); j++)
+		{
+			for (int k = 0; k < constraints4[i].teams2.size(); k++)
+			{
+				for (int l = 0; l < constraints4[i].slots.size(); l++)
+				{
+					if (constraints4[i].mode1 == "H") {
+						CA4_expr[i] += x[constraints4[i].teams1[j]][constraints4[i].teams2[k]][constraints4[i].slots[l]];
+					}
+					else if (constraints4[i].mode1 == "A") {
+						CA4_expr[i] += x[constraints4[i].teams2[k]][constraints4[i].teams1[j]][constraints4[i].slots[l]];
+					}
+					else if (constraints4[i].mode1 == "HA") {
+						CA4_expr[i] += x[constraints4[i].teams1[j]][constraints4[i].teams2[k]][constraints4[i].slots[l]] + x[constraints4[i].teams2[k]][constraints4[i].teams1[j]][constraints4[i].slots[l]];
+					}
+				}
+			}
+		}
+		Model.add(CA1_expr[i] <= constraints4[i].max + y_ca4[i]);
+		if (constraints4[i].type == "HARD") {
+			Model.add(y_ca4[i] == 0);
+		}
+		Objectivefn += constraints4[i].penalty * y_ca4[i];
+	}
+
+	//GA1 constraints
+	//BR1
+	//BR2
+	//FA1
+	//SE1
+
+	//solving the LP by minimising objective function
 	Model.add(IloMinimize(env, Objectivefn));
 	Objectivefn.end();
 	IloCplex cplex(Model);
