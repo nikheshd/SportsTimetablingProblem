@@ -1,12 +1,13 @@
 #include <iostream>
-#include <algorithm>
 #include <fstream>
 #include <string>
 #include <vector>
 #include "tinyxml2.h"
 #include "ilcplex/ilocplex.h"
+#include <chrono>
 using namespace std;
 using namespace tinyxml2;
+using namespace std::chrono;
 
 #pragma region Structs and Functions
 struct CA1 {
@@ -164,8 +165,6 @@ vector<pair<int, int>>stov2(const char* m)
 #pragma endregion
 
 int main() {
-
-	#pragma region Read Data
 	int n = 0;
 	string GameMode;
 	vector<CA1>constraints1;
@@ -181,7 +180,7 @@ int main() {
 	{
 		XMLDocument doc;
 		doc.LoadFile("ITC2021_Test1.xml");
-
+	#pragma region Read Data
 		XMLElement* root = doc.RootElement();
 
 		if (root)
@@ -458,6 +457,7 @@ int main() {
 	//cout << constraints1.size() << endl;
 	#pragma endregion
 
+	auto start = high_resolution_clock::now();
 	int m = 2 * (n - 1); //no. of time slots available
 	IloEnv env;
 	IloModel Model(env);
@@ -538,23 +538,24 @@ int main() {
 	IloExpr Objectivefn(env);  //objective function
 
 	//CA1 constraints
-	IloExprArray CA1_expr(env, constraints1.size());
 	IloNumVarArray y_ca1(env, constraints1.size(), 0, IloInfinity, ILOINT);
 	for (int i = 0; i < constraints1.size(); i++)
 	{
+		IloExpr CA1_expr(env);
 		for (int j = 0; j < n; j++)
 		{
 			for (int k = 0; k < constraints1[i].slots.size(); k++)
 			{
 				if(constraints1[i].model=="H"){ 
-					CA1_expr[i] += x[constraints1[i].teams[0]][j][constraints1[i].slots[k]]; 
+					CA1_expr += x[constraints1[i].teams[0]][j][constraints1[i].slots[k]]; 
 				}
 				else if(constraints1[i].model == "A"){ 
-					CA1_expr[i] += x[j][constraints1[i].teams[0]][constraints1[i].slots[k]]; 
+					CA1_expr += x[j][constraints1[i].teams[0]][constraints1[i].slots[k]]; 
 				}
 			}
 		}
-		Model.add(CA1_expr[i] <= constraints1[i].max + y_ca1[i]);
+		Model.add(CA1_expr <= constraints1[i].max + y_ca1[i]);
+		CA1_expr.end();
 		if (constraints1[i].type == "HARD") {
 			Model.add(y_ca1[i] == 0);
 		}
@@ -562,26 +563,27 @@ int main() {
 	}
 
 	//CA2 constraints
-	IloExprArray CA2_expr(env, constraints2.size());
 	IloNumVarArray y_ca2(env, constraints2.size(), 0, IloInfinity, ILOINT);
 	for (int i = 0; i < constraints2.size(); i++)
 	{
+		IloExpr CA2_expr(env);
 		for (int j = 0; j < constraints2[i].teams2.size(); j++)
 		{
 			for (int k = 0; k < constraints2[i].slots.size(); k++)
 			{
 				if (constraints2[i].model == "H") {
-					CA2_expr[i] += x[constraints2[i].teams1[0]][constraints2[i].teams2[j]][constraints2[i].slots[k]];
+					CA2_expr += x[constraints2[i].teams1[0]][constraints2[i].teams2[j]][constraints2[i].slots[k]];
 				}
 				else if (constraints2[i].model == "A") {
-					CA2_expr[i] += x[constraints2[i].teams2[j]][constraints2[i].teams1[0]][constraints2[i].slots[k]];
+					CA2_expr += x[constraints2[i].teams2[j]][constraints2[i].teams1[0]][constraints2[i].slots[k]];
 				}
 				else if (constraints2[i].model == "HA") {
-					CA2_expr[i] += x[constraints2[i].teams1[0]][constraints2[i].teams2[j]][constraints2[i].slots[k]] + x[constraints2[i].teams2[j]][constraints2[i].teams1[0]][constraints2[i].slots[k]];
+					CA2_expr += x[constraints2[i].teams1[0]][constraints2[i].teams2[j]][constraints2[i].slots[k]] + x[constraints2[i].teams2[j]][constraints2[i].teams1[0]][constraints2[i].slots[k]];
 				}
 			}
 		}
-		Model.add(CA2_expr[i] <= constraints2[i].max + y_ca2[i]);
+		Model.add(CA2_expr <= constraints2[i].max + y_ca2[i]);
+		CA2_expr.end();
 		if (constraints2[i].type == "HARD") {
 			Model.add(y_ca2[i] == 0);
 		}
@@ -589,28 +591,29 @@ int main() {
 	}
 
 	//CA3 constraints
-	IloExprArray CA3_expr(env, constraints3.size());
 	IloNumVarArray y_ca3(env, constraints3.size(), 0, IloInfinity, ILOINT);
 	for (int i = 0; i < constraints3.size(); i++)
 	{
 		for (int k = 0; k < m - constraints3[i].intp; k++)
 		{
+			IloExpr CA3_expr(env);
 			for (int l = k; l < k + constraints3[i].intp; l++)
 			{
 				for (int j = 0; j < constraints3[i].teams2.size(); j++)
 				{
 					if (constraints3[i].mode1 == "H") {
-						CA3_expr[i] += x[constraints3[i].teams1[0]][constraints3[i].teams2[j]][l];
+						CA3_expr += x[constraints3[i].teams1[0]][constraints3[i].teams2[j]][l];
 					}
 					else if (constraints3[i].mode1 == "A") {
-						CA3_expr[i] += x[constraints3[i].teams2[j]][constraints3[i].teams1[0]][l];
+						CA3_expr += x[constraints3[i].teams2[j]][constraints3[i].teams1[0]][l];
 					}
 					else if (constraints3[i].mode1 == "HA") {
-						CA3_expr[i] += x[constraints3[i].teams1[0]][constraints3[i].teams2[j]][l] + x[constraints3[i].teams2[j]][constraints3[i].teams1[0]][l];
+						CA3_expr += x[constraints3[i].teams1[0]][constraints3[i].teams2[j]][l] + x[constraints3[i].teams2[j]][constraints3[i].teams1[0]][l];
 					}
 				}
 			}
-			Model.add(CA3_expr[i] <= constraints3[i].max + y_ca3[i]);
+			Model.add(CA3_expr <= constraints3[i].max + y_ca3[i]);
+			CA3_expr.end();
 		}
 		if (constraints3[i].type == "HARD") {
 			Model.add(y_ca3[i] == 0);
@@ -619,10 +622,10 @@ int main() {
 	}
 
 	//CA4 constraints
-	IloExprArray CA4_expr(env, constraints4.size());
 	IloNumVarArray y_ca4(env, constraints4.size(), 0, IloInfinity, ILOINT);
 	for (int i = 0; i < constraints4.size(); i++)
 	{
+		IloExpr CA4_expr(env);
 		for (int j = 0; j < constraints4[i].teams1.size(); j++)
 		{
 			for (int k = 0; k < constraints4[i].teams2.size(); k++)
@@ -630,18 +633,19 @@ int main() {
 				for (int l = 0; l < constraints4[i].slots.size(); l++)
 				{
 					if (constraints4[i].mode1 == "H") {
-						CA4_expr[i] += x[constraints4[i].teams1[j]][constraints4[i].teams2[k]][constraints4[i].slots[l]];
+						CA4_expr += x[constraints4[i].teams1[j]][constraints4[i].teams2[k]][constraints4[i].slots[l]];
 					}
 					else if (constraints4[i].mode1 == "A") {
-						CA4_expr[i] += x[constraints4[i].teams2[k]][constraints4[i].teams1[j]][constraints4[i].slots[l]];
+						CA4_expr += x[constraints4[i].teams2[k]][constraints4[i].teams1[j]][constraints4[i].slots[l]];
 					}
 					else if (constraints4[i].mode1 == "HA") {
-						CA4_expr[i] += x[constraints4[i].teams1[j]][constraints4[i].teams2[k]][constraints4[i].slots[l]] + x[constraints4[i].teams2[k]][constraints4[i].teams1[j]][constraints4[i].slots[l]];
+						CA4_expr += x[constraints4[i].teams1[j]][constraints4[i].teams2[k]][constraints4[i].slots[l]] + x[constraints4[i].teams2[k]][constraints4[i].teams1[j]][constraints4[i].slots[l]];
 					}
 				}
 			}
 		}
-		Model.add(CA1_expr[i] <= constraints4[i].max + y_ca4[i]);
+		Model.add(CA4_expr <= constraints4[i].max + y_ca4[i]);
+		CA4_expr.end();
 		if (constraints4[i].type == "HARD") {
 			Model.add(y_ca4[i] == 0);
 		}
@@ -649,10 +653,150 @@ int main() {
 	}
 
 	//GA1 constraints
-	//BR1
-	//BR2
-	//FA1
-	//SE1
+	IloNumVarArray y_ga1(env, gameconstraints1.size(), 0, IloInfinity, ILOINT);
+	for (int i = 0; i < gameconstraints1.size(); i++)
+	{
+		IloExpr GA1_expr(env);
+		for (int j = 0; j < gameconstraints1[i].meetings.size(); j++)
+		{
+			for (int k = 0; k < gameconstraints1[i].slots.size(); k++)
+			{
+				GA1_expr += x[gameconstraints1[i].meetings[j].first][gameconstraints1[i].meetings[j].second][gameconstraints1[i].slots[k]];
+			}
+		}
+		Model.add(GA1_expr + y_ga1[i] >= gameconstraints1[i].min);
+		Model.add(GA1_expr <= gameconstraints1[i].max + y_ga1[i]);
+		GA1_expr.end();
+		if (gameconstraints1[i].type == "HARD") {
+			Model.add(y_ga1[i] == 0);
+		}
+		Objectivefn += gameconstraints1[i].penalty * (y_ga1[i]);
+	}
+
+	//BR1 constraints
+	IloNumVarArray y_br1(env, breakconstraints1.size(), 0, IloInfinity, ILOINT);
+	for (int i = 0; i < breakconstraints1.size(); i++)
+	{
+		IloExpr BR1_expr(env);
+		for (int k = 0; k < breakconstraints1[i].slots.size(); k++)
+		{
+			if (breakconstraints1[i].slots[k] == 0) {
+				continue;
+			}
+			IloExpr BR1_expr1(env);
+			IloExpr BR1_expr2(env);
+			for (int j = 0; j < n; j++)
+			{
+				BR1_expr1 += (x[breakconstraints1[i].teams[0]][j][(breakconstraints1[i].slots[k]) - 1] + x[breakconstraints1[i].teams[0]][j][breakconstraints1[i].slots[k]]);
+				BR1_expr2 += (x[j][breakconstraints1[i].teams[0]][(breakconstraints1[i].slots[k]) - 1] + x[j][breakconstraints1[i].teams[0]][breakconstraints1[i].slots[k]]);
+			}
+			if (breakconstraints1[i].mode2 == "H") {
+				BR1_expr += BR1_expr1 / 2;
+			}
+			else if (breakconstraints1[i].mode2 == "A") {
+				BR1_expr += BR1_expr2 / 2;
+			}
+			else if (breakconstraints1[i].mode2 == "HA") {
+				BR1_expr += BR1_expr1 / 2 + BR1_expr2 / 2;
+			}
+			BR1_expr1.end();
+			BR1_expr2.end();
+		}
+		Model.add(BR1_expr <= breakconstraints1[i].intp + y_br1[i]);
+		BR1_expr.end();
+		if (breakconstraints1[i].type == "HARD") {
+			Model.add(y_br1[i] == 0);
+		}
+		Objectivefn += breakconstraints1[i].penalty * y_br1[i];
+	}
+
+	//BR2 constraints
+	IloNumVarArray y_br2(env, breakconstraints2.size(), 0, IloInfinity, ILOINT);
+	for (int i = 0; i < breakconstraints2.size(); i++)
+	{
+		IloExpr BR2_expr(env);
+		for (int a = 0; a < breakconstraints2[i].teams.size(); a++)
+		{
+			for (int k = 0; k < breakconstraints2[i].slots.size(); k++)
+			{
+				if (breakconstraints2[i].slots[k] == 0) {
+					continue;
+				}
+				IloExpr BR2_expr1(env);
+				IloExpr BR2_expr2(env);
+				for (int j = 0; j < n; j++)
+				{
+					BR2_expr1 += (x[breakconstraints2[i].teams[a]][j][breakconstraints2[i].slots[k] - 1] + x[breakconstraints2[i].teams[a]][j][breakconstraints2[i].slots[k]]);
+					BR2_expr2 += (x[j][breakconstraints2[i].teams[a]][breakconstraints2[i].slots[k] - 1] + x[j][breakconstraints2[i].teams[a]][breakconstraints2[i].slots[k]]);
+				}
+				BR2_expr += BR2_expr1 / 2 + BR2_expr2 / 2;
+				BR2_expr1.end();
+				BR2_expr2.end();
+			}
+		}
+		Model.add(BR2_expr <= breakconstraints2[i].intp + y_br2[i]);
+		BR2_expr.end();
+		if (breakconstraints2[i].type == "HARD") {
+			Model.add(y_br2[i] == 0);
+		}
+		Objectivefn += breakconstraints2[i].penalty * y_br2[i];
+	}
+
+	//FA1 constraints
+	IloNumVarArray y_fa1(env, fairnessconstraints1.size(), 0, IloInfinity, ILOINT);
+	for (int i = 0; i < fairnessconstraints1.size(); i++)
+	{
+		for (int a = 0; a < fairnessconstraints1[i].teams.size()-1; a++)
+		{
+			for (int b = a+1; b < fairnessconstraints1[i].teams.size(); b++)
+			{
+				IloExpr FA1_expr(env);
+				for (int k = 0; k < fairnessconstraints1[i].slots.size(); k++)
+				{
+					for (int j = 0; j < n; j++)
+					{
+						FA1_expr += x[fairnessconstraints1[i].teams[a]][j][fairnessconstraints1[i].slots[k]] - x[fairnessconstraints1[i].teams[b]][j][fairnessconstraints1[i].slots[k]];
+					}
+				}
+				Model.add(FA1_expr <= fairnessconstraints1[i].intp + y_fa1[i]);
+				Model.add(-FA1_expr <= fairnessconstraints1[i].intp + y_fa1[i]);
+				FA1_expr.end();
+			}
+		}
+		if (fairnessconstraints1[i].type == "HARD") {
+			Model.add(y_fa1[i] == 0);
+		}
+		Objectivefn += fairnessconstraints1[i].penalty * y_fa1[i];
+	}
+
+	//SE1 constraints
+	IloNumVarArray y_se1(env, seperationconstraints1.size(), 0, IloInfinity, ILOINT);
+	IloBoolVarArray y2_se1(env, 2*seperationconstraints1.size());
+	for (int i = 0; i < fairnessconstraints1.size(); i++)
+	{
+		for (int a = 0; a < seperationconstraints1[i].teams.size() - 1; a++)
+		{
+			for (int b = a+1; b < seperationconstraints1[i].teams.size(); b++)
+			{
+				IloExpr SE1_expr(env);
+				for (int k = 0; k < m; k++)
+				{
+					SE1_expr += k * x[seperationconstraints1[i].teams[a]][seperationconstraints1[i].teams[b]][k] - k * x[seperationconstraints1[i].teams[b]][seperationconstraints1[i].teams[a]][k];
+				}
+				//if SE1_expr>=0
+				Model.add(SE1_expr <=INT_MAX*(1-y2_se1[i]));
+				Model.add(seperationconstraints1[i].min -y_se1[i]-SE1_expr <=  INT_MAX*y2_se1[i]);
+				//if SE1_expr<=0
+				Model.add(-SE1_expr <= INT_MAX * (1 - y2_se1[2 * i + 1]));
+				Model.add(seperationconstraints1[i].min - y_se1[i] - SE1_expr <= INT_MAX * (1 - y2_se1[2 * i + 1]));
+				SE1_expr.end();
+			}
+		}
+		if (seperationconstraints1[i].type == "HARD") {
+			Model.add(y_se1[i] == 0);
+		}
+		Objectivefn += seperationconstraints1[i].penalty * y_se1[i];
+	}
 
 	//solving the LP by minimising objective function
 	Model.add(IloMinimize(env, Objectivefn));
@@ -660,20 +804,24 @@ int main() {
 	IloCplex cplex(Model);
 	cplex.setOut(env.getNullStream());
 	cplex.solve();
-	cout << "Total penalty: " << cplex.getObjValue() << endl;
+	auto stop = high_resolution_clock::now();
+	ofstream outfile("output.txt");
+	outfile << "Total penalty: " << cplex.getObjValue() << "\n" << endl;
 	for (int k = 0; k < m; k++)
 	{
-		cout << "Slot " << k << ": ";
+		outfile << "Slot " << k << ": ";
 		for (int i = 0; i < n; i++)
 		{
 			for (int j = 0; j < n; j++)
 			{
 				if (cplex.getValue(x[i][j][k]) != 0) {
-					cout << "(" << i << ", " << j << "); ";
+					outfile << "(" << i << ", " << j << "); ";
 				}
 			}
 		}
-		cout << "\n";
+		outfile << "\n";
 	}
+	auto duration = duration_cast<microseconds>(stop - start);
+	outfile << "\nTime taken: "<< duration.count() << " microseconds" << endl;
 	return 0;
 }

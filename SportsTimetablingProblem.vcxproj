@@ -153,6 +153,9 @@
   <ItemGroup>
     <Xml Include="..\..\..\Desktop\timetabling\timetabling\timetabling\ITC2021_Test1.xml" />
   </ItemGroup>
+  <ItemGroup>
+    <Text Include="output.txt" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
