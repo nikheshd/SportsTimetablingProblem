@@ -166,6 +166,7 @@ vector<pair<int, int>>stov2(const char* m)
 
 int main() {
 	int n = 0;
+	string InstanceName;
 	string GameMode;
 	vector<CA1>constraints1;
 	vector<CA2>constraints2;
@@ -182,7 +183,17 @@ int main() {
 		doc.LoadFile("ITC2021_Test1.xml");
 	#pragma region Read Data
 		XMLElement* root = doc.RootElement();
-
+		if (root) 
+		{
+			XMLElement* instance_name = root->FirstChildElement("MetaData")->FirstChildElement("InstanceName");
+			if (instance_name) {
+				InstanceName = instance_name->GetText();
+			}
+			else
+			{
+				cerr << "error: instancename not found\n";
+			}
+		}
 		if (root)
 		{
 			XMLElement* teams = root->FirstChildElement("Resources")->FirstChildElement("Teams");
@@ -675,9 +686,13 @@ int main() {
 
 	//BR1 constraints
 	IloNumVarArray y_br1(env, breakconstraints1.size(), 0, IloInfinity, ILOINT);
+	IloArray<IloBoolVarArray> H_br1(env, breakconstraints1.size());
+	IloArray<IloBoolVarArray> A_br1(env, breakconstraints1.size());
 	for (int i = 0; i < breakconstraints1.size(); i++)
 	{
 		IloExpr BR1_expr(env);
+		H_br1[i] = IloBoolVarArray(env, breakconstraints1[i].slots.size());
+		A_br1[i] = IloBoolVarArray(env, breakconstraints1[i].slots.size());
 		for (int k = 0; k < breakconstraints1[i].slots.size(); k++)
 		{
 			if (breakconstraints1[i].slots[k] == 0) {
@@ -691,16 +706,20 @@ int main() {
 				BR1_expr2 += (x[j][breakconstraints1[i].teams[0]][(breakconstraints1[i].slots[k]) - 1] + x[j][breakconstraints1[i].teams[0]][breakconstraints1[i].slots[k]]);
 			}
 			if (breakconstraints1[i].mode2 == "H") {
-				BR1_expr += BR1_expr1 / 2;
+				Model.add(H_br1[i][k] <= BR1_expr1/2);
+				Model.add(A_br1[i][k] == 0);
 			}
 			else if (breakconstraints1[i].mode2 == "A") {
-				BR1_expr += BR1_expr2 / 2;
+				Model.add(A_br1[i][k] <= BR1_expr2 / 2);
+				Model.add(H_br1[i][k] == 0);
 			}
 			else if (breakconstraints1[i].mode2 == "HA") {
-				BR1_expr += BR1_expr1 / 2 + BR1_expr2 / 2;
+				Model.add(H_br1[i][k] <= BR1_expr1 / 2);
+				Model.add(A_br1[i][k] <= BR1_expr2 / 2);
 			}
 			BR1_expr1.end();
 			BR1_expr2.end();
+			BR1_expr += H_br1[i][k] + A_br1[i][k];
 		}
 		Model.add(BR1_expr <= breakconstraints1[i].intp + y_br1[i]);
 		BR1_expr.end();
@@ -712,24 +731,34 @@ int main() {
 
 	//BR2 constraints
 	IloNumVarArray y_br2(env, breakconstraints2.size(), 0, IloInfinity, ILOINT);
+	IloArray<IloArray<IloBoolVarArray>> H(env, breakconstraints2.size());
+	IloArray<IloArray<IloBoolVarArray>> A(env, breakconstraints2.size());
 	for (int i = 0; i < breakconstraints2.size(); i++)
 	{
 		IloExpr BR2_expr(env);
+		H[i] = IloArray<IloBoolVarArray > (env, breakconstraints2[i].teams.size());
+		A[i] = IloArray<IloBoolVarArray >(env, breakconstraints2[i].teams.size());
 		for (int a = 0; a < breakconstraints2[i].teams.size(); a++)
 		{
+			H[i][a] = IloBoolVarArray(env, breakconstraints2[i].slots.size());
+			A[i][a] = IloBoolVarArray(env, breakconstraints2[i].slots.size());
 			for (int k = 0; k < breakconstraints2[i].slots.size(); k++)
 			{
 				if (breakconstraints2[i].slots[k] == 0) {
+					Model.add(H[i][a][k] == 0);
+					Model.add(A[i][a][k] == 0);
 					continue;
 				}
 				IloExpr BR2_expr1(env);
 				IloExpr BR2_expr2(env);
 				for (int j = 0; j < n; j++)
 				{
-					BR2_expr1 += (x[breakconstraints2[i].teams[a]][j][breakconstraints2[i].slots[k] - 1] + x[breakconstraints2[i].teams[a]][j][breakconstraints2[i].slots[k]]);
-					BR2_expr2 += (x[j][breakconstraints2[i].teams[a]][breakconstraints2[i].slots[k] - 1] + x[j][breakconstraints2[i].teams[a]][breakconstraints2[i].slots[k]]);
+					BR2_expr1 += (x[breakconstraints2[i].teams[a]][j][(breakconstraints2[i].slots[k]) - 1] + x[breakconstraints2[i].teams[a]][j][breakconstraints2[i].slots[k]]);
+					BR2_expr2 += (x[j][breakconstraints2[i].teams[a]][(breakconstraints2[i].slots[k]) - 1] + x[j][breakconstraints2[i].teams[a]][breakconstraints2[i].slots[k]]);
 				}
-				BR2_expr += BR2_expr1 / 2 + BR2_expr2 / 2;
+				Model.add(BR2_expr1/2 >= H[i][a][k]);
+				Model.add(BR2_expr2/2 >= A[i][a][k]);
+				BR2_expr += H[i][a][k] + A[i][a][k];
 				BR2_expr1.end();
 				BR2_expr2.end();
 			}
@@ -806,6 +835,7 @@ int main() {
 	cplex.solve();
 	auto stop = high_resolution_clock::now();
 	ofstream outfile("output.txt");
+	outfile << "Solution to " << InstanceName << ": \n" << endl;
 	outfile << "Total penalty: " << cplex.getObjValue() << "\n" << endl;
 	for (int k = 0; k < m; k++)
 	{
