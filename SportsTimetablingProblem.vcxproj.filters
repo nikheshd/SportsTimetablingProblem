@@ -18,19 +18,36 @@
     <ClCompile Include="Source.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\..\Desktop\timetabling\timetabling\timetabling\tinyxml2.cpp">
+    <ClCompile Include="tinyxml2.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-  </ItemGroup>
-  <ItemGroup>
-    <ClInclude Include="..\..\..\Desktop\timetabling\timetabling\timetabling\tinyxml2.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
+    <ClCompile Include="Source1.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <Text Include="output.txt" />
   </ItemGroup>
   <ItemGroup>
-    <Xml Include="ITC2021_Test1.xml" />
+    <Xml Include="ITC2021_Test4.xml">
+      <Filter>Resource Files</Filter>
+    </Xml>
+    <Xml Include="ITC2021_Test1.xml">
+      <Filter>Resource Files</Filter>
+    </Xml>
+    <Xml Include="ITC2021_Test2.xml">
+      <Filter>Resource Files</Filter>
+    </Xml>
+    <Xml Include="ITC2021_Test3.xml">
+      <Filter>Resource Files</Filter>
+    </Xml>
+    <Xml Include="ITC2021_Test5.xml">
+      <Filter>Resource Files</Filter>
+    </Xml>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="tinyxml2.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

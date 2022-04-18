@@ -180,7 +180,7 @@ int main() {
 	try
 	{
 		XMLDocument doc;
-		doc.LoadFile("ITC2021_Test1.xml");
+		doc.LoadFile("ITC2021_Test5.xml");
 	#pragma region Read Data
 		XMLElement* root = doc.RootElement();
 		if (root) 
@@ -498,6 +498,7 @@ int main() {
 				B1_lhs += x[i][j][k] + x[j][i][k];
 			}
 			Model.add(B1_lhs == 1);
+			B1_lhs.end();
 		}
 	}
 
@@ -515,6 +516,7 @@ int main() {
 				B2_lhs += x[i][j][k];
 			}
 			Model.add(B2_lhs == 1);
+			B2_lhs.end();
 		}
 	}
 
@@ -522,17 +524,15 @@ int main() {
 	if (GameMode == "P") {
 		for (int i = 0; i < n; i++)
 		{
-			for (int j = 0; j < n; j++)
+			for (int j = i+1; j < n; j++)
 			{
-				if (i == j) {
-					continue;
-				}
 				IloExpr B2_lhs(env);
 				for (int k = 0; k < n - 1; k++)
 				{
 					B2_lhs += x[i][j][k] + x[j][i][k];
 				}
 				Model.add(B2_lhs == 1);
+				B2_lhs.end();
 			}
 		}
 	}
@@ -601,74 +601,142 @@ int main() {
 		Objectivefn += constraints2[i].penalty * y_ca2[i];
 	}
 
-	//CA3 constraints
-	vector<CA3> new_constraints3;
-	for (int i = 0;	i < constraints3.size(); i++)
+	//CA3
+	IloNumVarArray y(env, 0, 0, IloInfinity, ILOINT);
+	for (int i = 0; i < constraints3.size(); i++)
 	{
+		//cout << constraints3[i].min << " " << constraints3[i].max << " " << constraints3[i].penalty << " " << constraints3[i].intp<<" "<< constraints3[i].mode1 << endl;
 		for (int j = 0; j < constraints3[i].teams1.size(); j++)
 		{
-			new_constraints3.push_back({ constraints3[i].type,constraints3[i].min,constraints3[i].max,constraints3[i].intp,constraints3[i].penalty,{constraints3[i].teams1[j]}, constraints3[i].teams2, constraints3[i].mode1, constraints3[i].mode2 });
-		}
-	}
-	IloNumVarArray y_ca3(env, new_constraints3.size(), 0, IloInfinity, ILOINT);
-	for (int i = 0; i < new_constraints3.size(); i++)
-	{
-		for (int k = 0; k < m - new_constraints3[i].intp; k++)
-		{
-			IloExpr CA3_expr(env);
-			for (int l = k; l < k + new_constraints3[i].intp; l++)
+			for (int k = 0; k <= m-constraints3[i].intp; k++)
 			{
-				for (int j = 0; j < new_constraints3[i].teams2.size(); j++)
+				IloExpr c(env);
+				for (int l = 0; l < constraints3[i].teams2.size(); l++)
 				{
-					if (new_constraints3[i].mode1 == "H") {
-						CA3_expr += x[new_constraints3[i].teams1[0]][new_constraints3[i].teams2[j]][l];
-					}
-					else if (new_constraints3[i].mode1 == "A") {
-						CA3_expr += x[new_constraints3[i].teams2[j]][new_constraints3[i].teams1[0]][l];
-					}
-					else if (new_constraints3[i].mode1 == "HA") {
-						CA3_expr += x[new_constraints3[i].teams1[0]][new_constraints3[i].teams2[j]][l] + x[new_constraints3[i].teams2[j]][new_constraints3[i].teams1[0]][l];
+					for (int m = k; m < k+ constraints3[i].intp; m++)
+					{
+						if (constraints3[i].mode1 == "H") {
+							c += x[constraints3[i].teams1[j]][constraints3[i].teams2[l]][m];
+						}
+						else if (constraints3[i].mode1 == "A") {
+							c += x[constraints3[i].teams2[l]][constraints3[i].teams1[j]][m];
+						}
+						else if (constraints3[i].mode1 == "HA") {
+							c += x[constraints3[i].teams1[j]][constraints3[i].teams2[l]][m] + x[constraints3[i].teams2[l]][constraints3[i].teams1[j]][m];
+						}
 					}
 				}
+				if (constraints3[i].type == "HARD") {
+					Model.add(c <= constraints3[i].max);
+					Model.add(c >= constraints3[i].min);
+				}
+				else if (constraints3[i].type == "SOFT") {
+					y.add(IloNumVar(env, 0, IloInfinity, ILOINT));
+					Model.add(c - y[y.getSize() - 1] <= constraints3[i].max);
+					Objectivefn += constraints3[i].penalty * y[y.getSize() - 1];
+				}
 			}
-			Model.add(CA3_expr <= new_constraints3[i].max + y_ca3[i]);
-			CA3_expr.end();
 		}
-		if (new_constraints3[i].type == "HARD") {
-			Model.add(y_ca3[i] == 0);
-		}
-		Objectivefn += new_constraints3[i].penalty * y_ca3[i];
 	}
 
+	/*//CA3 constraints
+	IloArray<IloArray<IloNumVarArray>> y_ca3(env, constraints3.size());
+	for (int a = 0; a < constraints3.size(); a++)
+	{
+		y_ca3[a] = IloArray<IloNumVarArray>(env, constraints3[a].teams1.size());
+		for (int i = 0; i < constraints3[a].teams1.size(); i++)
+		{
+			y_ca3[a][i] = IloNumVarArray(env, m - constraints3[a].intp, 0, IloInfinity, ILOINT);
+			for (int k = 0; k <= m - constraints3[a].intp; k++)
+			{
+				IloExpr CA3_expr(env);
+				for (int j = 0; j < constraints3[a].teams2.size(); j)
+				{
+					for (int l = k; l < k + constraints3[a].intp; l++)
+					{
+						if (constraints3[a].mode1 == "H") {
+							CA3_expr += x[constraints3[a].teams1[i]][constraints3[a].teams2[j]][l];
+						}
+						else if (constraints3[a].mode1 == "A") {
+							CA3_expr += x[constraints3[a].teams2[j]][constraints3[a].teams1[i]][l];
+						}
+						else if (constraints3[a].mode1 == "HA") {
+							CA3_expr += x[constraints3[a].teams1[i]][constraints3[a].teams2[j]][l] + x[constraints3[a].teams2[j]][constraints3[a].teams1[i]][l];
+						}
+					}
+				}
+				Model.add(CA3_expr <= constraints3[a].max + y_ca3[a][i][k]);
+				CA3_expr.end();
+				if (constraints3[a].type == "HARD") {
+					Model.add(y_ca3[a][i][k] == 0);
+				}
+				Objectivefn += constraints3[a].penalty * y_ca3[a][i][k];
+			}
+		}
+	}*/
+	
+
 	//CA4 constraints
-	IloNumVarArray y_ca4(env, constraints4.size(), 0, IloInfinity, ILOINT);
+	IloArray<IloNumVarArray> y_ca4(env, constraints4.size());
 	for (int i = 0; i < constraints4.size(); i++)
 	{
-		IloExpr CA4_expr(env);
-		for (int j = 0; j < constraints4[i].teams1.size(); j++)
-		{
-			for (int k = 0; k < constraints4[i].teams2.size(); k++)
+		if (constraints4[i].mode2 == "GLOBAL") {
+			y_ca4[i] = IloNumVarArray(env, 1, 0, IloInfinity, ILOINT);
+			IloExpr CA4_expr(env);
+			for (int j = 0; j < constraints4[i].teams1.size(); j++)
 			{
-				for (int l = 0; l < constraints4[i].slots.size(); l++)
+				for (int k = 0; k < constraints4[i].teams2.size(); k++)
 				{
-					if (constraints4[i].mode1 == "H") {
-						CA4_expr += x[constraints4[i].teams1[j]][constraints4[i].teams2[k]][constraints4[i].slots[l]];
-					}
-					else if (constraints4[i].mode1 == "A") {
-						CA4_expr += x[constraints4[i].teams2[k]][constraints4[i].teams1[j]][constraints4[i].slots[l]];
-					}
-					else if (constraints4[i].mode1 == "HA") {
-						CA4_expr += x[constraints4[i].teams1[j]][constraints4[i].teams2[k]][constraints4[i].slots[l]] + x[constraints4[i].teams2[k]][constraints4[i].teams1[j]][constraints4[i].slots[l]];
+					for (int l = 0; l < constraints4[i].slots.size(); l++)
+					{
+						if (constraints4[i].mode1 == "H") {
+							CA4_expr += x[constraints4[i].teams1[j]][constraints4[i].teams2[k]][constraints4[i].slots[l]];
+						}
+						else if (constraints4[i].mode1 == "A") {
+							CA4_expr += x[constraints4[i].teams2[k]][constraints4[i].teams1[j]][constraints4[i].slots[l]];
+						}
+						else if (constraints4[i].mode1 == "HA") {
+							CA4_expr += x[constraints4[i].teams1[j]][constraints4[i].teams2[k]][constraints4[i].slots[l]] + x[constraints4[i].teams2[k]][constraints4[i].teams1[j]][constraints4[i].slots[l]];
+						}
 					}
 				}
 			}
+			Model.add(CA4_expr <= constraints4[i].max + y_ca4[i][0]);
+			CA4_expr.end();
+			if (constraints4[i].type == "HARD") {
+				Model.add(y_ca4[i][0] == 0);
+			}
+			Objectivefn += constraints4[i].penalty * y_ca4[i][0];
 		}
-		Model.add(CA4_expr <= constraints4[i].max + y_ca4[i]);
-		CA4_expr.end();
-		if (constraints4[i].type == "HARD") {
-			Model.add(y_ca4[i] == 0);
+		else if (constraints4[i].mode2 == "EVERY") {
+			y_ca4[i] = IloNumVarArray(env, constraints4[i].slots.size(), 0, IloInfinity, ILOINT);
+			for (int l = 0; l < constraints4[i].slots.size(); l++)
+			{
+				IloExpr CA4_expr(env);
+				for (int j = 0; j < constraints4[i].teams1.size(); j++)
+				{
+					for (int k = 0; k < constraints4[i].teams2.size(); k++)
+					{
+						if (constraints4[i].mode1 == "H") {
+							CA4_expr += x[constraints4[i].teams1[j]][constraints4[i].teams2[k]][constraints4[i].slots[l]];
+						}
+						else if (constraints4[i].mode1 == "A") {
+							CA4_expr += x[constraints4[i].teams2[k]][constraints4[i].teams1[j]][constraints4[i].slots[l]];
+						}
+						else if (constraints4[i].mode1 == "HA") {
+							CA4_expr += x[constraints4[i].teams1[j]][constraints4[i].teams2[k]][constraints4[i].slots[l]] + x[constraints4[i].teams2[k]][constraints4[i].teams1[j]][constraints4[i].slots[l]];
+						}
+
+					}
+				}
+				Model.add(CA4_expr <= constraints4[i].max + y_ca4[i][l]);
+				CA4_expr.end();
+				if (constraints4[i].type == "HARD") {
+					Model.add(y_ca4[i][l] == 0);
+				}
+				Objectivefn += constraints4[i].penalty * y_ca4[i][l];
+			}
 		}
-		Objectivefn += constraints4[i].penalty * y_ca4[i];
 	}
 
 	//GA1 constraints
@@ -713,21 +781,19 @@ int main() {
 				BR1_expr1 += (x[breakconstraints1[i].teams[0]][j][(breakconstraints1[i].slots[k]) - 1] + x[breakconstraints1[i].teams[0]][j][breakconstraints1[i].slots[k]]);
 				BR1_expr2 += (x[j][breakconstraints1[i].teams[0]][(breakconstraints1[i].slots[k]) - 1] + x[j][breakconstraints1[i].teams[0]][breakconstraints1[i].slots[k]]);
 			}
+			Model.add(H_br1[i][k] >= BR1_expr1 - 1);
+			Model.add(A_br1[i][k] >= BR1_expr2 - 1);
 			if (breakconstraints1[i].mode2 == "H") {
-				Model.add(H_br1[i][k] <= BR1_expr1/2);
-				Model.add(A_br1[i][k] == 0);
+				BR1_expr += H_br1[i][k];
 			}
 			else if (breakconstraints1[i].mode2 == "A") {
-				Model.add(A_br1[i][k] <= BR1_expr2 / 2);
-				Model.add(H_br1[i][k] == 0);
+				BR1_expr += A_br1[i][k];
 			}
 			else if (breakconstraints1[i].mode2 == "HA") {
-				Model.add(H_br1[i][k] <= BR1_expr1 / 2);
-				Model.add(A_br1[i][k] <= BR1_expr2 / 2);
+				BR1_expr += H_br1[i][k] + A_br1[i][k];
 			}
 			BR1_expr1.end();
 			BR1_expr2.end();
-			BR1_expr += H_br1[i][k] + A_br1[i][k];
 		}
 		Model.add(BR1_expr <= breakconstraints1[i].intp + y_br1[i]);
 		BR1_expr.end();
@@ -764,8 +830,8 @@ int main() {
 					BR2_expr1 += (x[breakconstraints2[i].teams[a]][j][(breakconstraints2[i].slots[k]) - 1] + x[breakconstraints2[i].teams[a]][j][breakconstraints2[i].slots[k]]);
 					BR2_expr2 += (x[j][breakconstraints2[i].teams[a]][(breakconstraints2[i].slots[k]) - 1] + x[j][breakconstraints2[i].teams[a]][breakconstraints2[i].slots[k]]);
 				}
-				Model.add(BR2_expr1/2 >= H[i][a][k]);
-				Model.add(BR2_expr2/2 >= A[i][a][k]);
+				Model.add(BR2_expr1-1 <= H[i][a][k]);
+				Model.add(BR2_expr2-1 <= A[i][a][k]);
 				BR2_expr += H[i][a][k] + A[i][a][k];
 				BR2_expr1.end();
 				BR2_expr2.end();
@@ -807,6 +873,41 @@ int main() {
 	}
 
 	//SE1 constraints
+	IloNumVarArray y_se1(env, 0, 0, IloInfinity, ILOINT);
+	IloBoolVarArray y2(env, 0);
+	for (int a = 0; a < seperationconstraints1.size(); a++)
+	{
+		for (int i = 0; i < seperationconstraints1[a].teams.size(); i++)
+		{
+			for (int j = i+1; j < seperationconstraints1[a].teams.size(); j++)
+			{
+				IloExpr c(env);
+				for (int k = 0; k < m; k++)
+				{
+					c += k * x[seperationconstraints1[a].teams[i]][seperationconstraints1[a].teams[j]][k] - k * x[seperationconstraints1[a].teams[j]][seperationconstraints1[a].teams[i]][k];
+				}
+				if (seperationconstraints1[a].type == "HARD") {
+					y2.add(IloBoolVar(env));
+					Model.add(seperationconstraints1[a].min - c <= INT_MAX * y2[y2.getSize() - 1]);
+					Model.add(seperationconstraints1[a].min + c <= INT_MAX * (1-y2[y2.getSize() - 1]));
+				}
+				else if(seperationconstraints1[a].type == "SOFT") {
+					y2.add(IloBoolVar(env));
+					y_se1.add(IloNumVar(env, 0, IloInfinity, ILOINT));
+					//if c>0
+					Model.add(c <= INT_MAX * (1-y2[y2.getSize() - 1]));
+					Model.add(seperationconstraints1[a].min - y_se1[y_se1.getSize() - 1] - c <= INT_MAX * y2[y2.getSize() - 1]);
+					//if c<0
+					y2.add(IloBoolVar(env));
+					Model.add(-c <= INT_MAX * (1 - y2[y2.getSize() - 1]));
+					Model.add(seperationconstraints1[a].min - y_se1[y_se1.getSize() - 1] + c <= INT_MAX * y2[y2.getSize() - 1]);
+					Objectivefn += seperationconstraints1[a].penalty * y_se1[y_se1.getSize() - 1];
+				}
+			}
+		}
+	}
+	
+	/*//SE1 constraints
 	vector<SE1> new_seperationconstraints1;
 	for (int i = 0; i < seperationconstraints1.size(); i++)
 	{
@@ -839,8 +940,9 @@ int main() {
 			Model.add(y_se1[2 * i + 1] == 0);
 		}
 		Objectivefn += new_seperationconstraints1[i].penalty * (y_se1[i]);
-	}
-
+	}*/
+	
+	
 	//solving the LP by minimising objective function
 	Model.add(IloMinimize(env, Objectivefn));
 	Objectivefn.end();
@@ -868,6 +970,5 @@ int main() {
 	}
 	auto duration = duration_cast<microseconds>(stop - start);
 	outfile << "\nTime taken: "<< duration.count() << " microseconds" << endl;
-	cout << new_seperationconstraints1.size();
 	return 0;
 }
