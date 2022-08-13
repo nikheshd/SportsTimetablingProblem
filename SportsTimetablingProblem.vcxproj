@@ -145,6 +145,21 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="Source.cpp" />
+    <ClCompile Include="Source1.cpp" />
+    <ClCompile Include="tinyxml2.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <Text Include="output.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <Xml Include="ITC2021_Test1.xml" />
+    <Xml Include="ITC2021_Test2.xml" />
+    <Xml Include="ITC2021_Test3.xml" />
+    <Xml Include="ITC2021_Test4.xml" />
+    <Xml Include="ITC2021_Test5.xml" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="tinyxml2.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
